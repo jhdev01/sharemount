@@ -39,6 +39,8 @@ targets:
       - path: Tests
       - path: Sources/Models/Share.swift
       - path: Sources/Models/MountSource.swift
+      - path: Sources/Models/Credentials.swift
+      - path: Sources/Models/SMBShareList.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: io.github.jhdev01.ShareMountTests

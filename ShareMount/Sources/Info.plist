@@ -23,6 +23,13 @@
     <!-- Agent app: no Dock icon, menu bar only. -->
     <key>LSUIElement</key>
     <true/>
+    <!-- Browse Network: find computers sharing files (SMB) over Bonjour. -->
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>ShareMount looks for computers and file servers on your network so you can connect to their shared folders and drives.</string>
+    <key>NSBonjourServices</key>
+    <array>
+        <string>_smb._tcp</string>
+    </array>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
     <key>NSHumanReadableCopyright</key>

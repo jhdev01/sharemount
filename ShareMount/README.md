@@ -6,6 +6,8 @@ Each share shows a ✓ when it's currently connected. Credentials are remembered
 in the Keychain after the first connect, so later mounts are silent.
 
 - Menu-bar-only agent — no Dock icon, stays out of the way.
+- **Browse Network…** finds computers and file servers nearby, lists their
+  shared folders and drives, and connects or adds them to the menu in one click.
 - Add / edit / remove shares in a simple Preferences window.
 - Optional launch at login.
 
@@ -62,6 +64,8 @@ GitHub Actions runs the same build and tests on every push and pull request
 | "Is it connected?" | `getmntinfo` — parses each SMB device name and matches exact host + share name (`MountSource`) |
 | Unmounting | `NSWorkspace.unmountAndEjectDevice(at:)` |
 | Remembered credentials | Keychain internet-password items, keyed by host (`KeychainStore`) |
+| Finding computers | Bonjour `_smb._tcp` browsing with `NetServiceBrowser` (`NetworkBrowser`) |
+| Listing a computer's shares | `/usr/bin/smbutil view` — macOS has no public API for this (`ShareLister`) |
 | Add/edit/remove shares | SwiftUI `PreferencesView` in a hosted `NSWindow` |
 | Launch at login | `SMAppService.mainApp.register()` (`LoginItem`) |
 | No Dock icon | `LSUIElement` + `NSApp.setActivationPolicy(.accessory)` |
@@ -79,6 +83,31 @@ there — only in the Keychain.
   kernel's mount table, not a live socket).
 - First connect shows a username/password prompt; after a successful mount the
   credentials are saved to the Keychain and reused silently.
+
+## Browsing the network
+
+Choose **Browse Network…** (⌘B) from the menu bar icon.
+
+- **Nearby** lists every computer advertising SMB file sharing: Macs with
+  File Sharing turned on and most NAS boxes. The first time, macOS asks to let
+  ShareMount find devices on your local network — click **Allow**. (If you
+  missed it: System Settings → Privacy & Security → Local Network.)
+- **Windows PCs** usually don't advertise themselves this way. Type the PC's
+  name or IP address in the box under the list and press **Go**.
+- Pick a computer to see its shared folders and drives. If it asks you to sign
+  in, use an account on *that* computer; it's saved in your Keychain.
+- **Connect** mounts a share now. **Add to Menu** saves it so it's one click
+  from the menu bar next time.
+
+**To reach a hard drive plugged into another Mac**, share it on that Mac
+first: System Settings → General → Sharing → File Sharing (turn on) → ⓘ → **+**
+under Shared Folders → choose the drive. It then shows up in Browse Network
+like any other share.
+
+When signing in, the username and password are passed to `smbutil` on its
+command line, so for those few seconds they're visible to other processes on
+your Mac (e.g. via `ps`). That's fine for a personal Mac; keep it in mind on a
+shared one.
 
 ## Network location format
 

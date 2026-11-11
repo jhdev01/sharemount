@@ -31,4 +31,9 @@ final class ShareStore: ObservableObject {
             defaults.set(data, forKey: key)
         }
     }
+
+    /// Append one share (used by the Browse window's "Add to Menu").
+    func add(_ share: Share) {
+        replaceAll(shares + [share])
+    }
 }

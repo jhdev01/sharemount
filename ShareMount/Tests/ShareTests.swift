@@ -48,3 +48,11 @@ final class ShareTests: XCTestCase {
         XCTAssertEqual(Share.normalizedHost("[fe80::1]"), "fe80::1")
     }
 }
+
+final class ShareRefersToTests: XCTestCase {
+    func testRefersTo() {
+        let share = Share(displayName: "x", location: "smb://NAS.local/My Share")
+        XCTAssertTrue(share.refersTo(host: "nas.local", shareName: "my share"))
+        XCTAssertFalse(share.refersTo(host: "nas2.local", shareName: "My Share"))
+    }
+}

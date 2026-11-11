@@ -17,6 +17,10 @@ struct PreferencesView: View {
             footer
         }
         .frame(minWidth: 520, minHeight: 360)
+        // Pick up shares added elsewhere (e.g. Browse Network → Add to Menu).
+        .onReceive(ShareStore.shared.$shares) { latest in
+            if latest != shares { shares = latest }
+        }
     }
 
     // MARK: List

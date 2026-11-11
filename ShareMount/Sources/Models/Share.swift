@@ -45,6 +45,14 @@ struct Share: Codable, Identifiable, Equatable {
         return path.split(separator: "/").first.map(String.init)
     }
 
+    /// True if this share points at `shareName` on `host` (same comparison
+    /// rules as mount detection).
+    func refersTo(host otherHost: String, shareName otherName: String) -> Bool {
+        guard let host, let shareName else { return false }
+        return Self.normalizedHost(host) == Self.normalizedHost(otherHost)
+            && shareName.caseInsensitiveCompare(otherName) == .orderedSame
+    }
+
     /// Canonical form of a host name for comparisons: lower-cased, no IPv6
     /// brackets or trailing dot, and Bonjour service names
     /// ("nas._smb._tcp.local") reduced to their plain ".local" name.

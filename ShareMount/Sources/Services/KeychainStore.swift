@@ -1,11 +1,6 @@
 import Foundation
 import Security
 
-struct Credentials: Equatable {
-    var username: String
-    var password: String
-}
-
 /// Stores SMB credentials as a standard internet-password Keychain item,
 /// keyed by server host. Using `kSecAttrProtocolSMB` means these are the
 /// same kind of items macOS itself creates for network shares.

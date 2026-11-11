@@ -7,6 +7,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let menu = NSMenu()
     private lazy var preferences = PreferencesWindowController()
+    private lazy var browseWindow = BrowseWindowController()
     private let workQueue = DispatchQueue(label: "ShareMount.mount", qos: .userInitiated)
 
     override init() {
@@ -47,6 +48,12 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         }
 
         menu.addItem(.separator())
+
+        let browse = NSMenuItem(title: "Browse Network…",
+                                action: #selector(openBrowser),
+                                keyEquivalent: "b")
+        browse.target = self
+        menu.addItem(browse)
 
         let prefs = NSMenuItem(title: "Preferences…",
                                action: #selector(openPreferences),
@@ -133,6 +140,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         alert.alertStyle = .warning
         NSApp.activate(ignoringOtherApps: true)
         alert.runModal()
+    }
+
+    @objc private func openBrowser() {
+        browseWindow.show()
     }
 
     @objc private func openPreferences() {
