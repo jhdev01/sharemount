@@ -88,7 +88,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
                 }
             } catch {
                 DispatchQueue.main.async {
-                    self.notifyFailure(share, message: "Could not connect.\n\n\(error)")
+                    self.notifyFailure(share, message: "Could not connect.\n\n\(error.localizedDescription)")
                 }
             }
         }
@@ -108,7 +108,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
                 }
             } catch {
                 DispatchQueue.main.async {
-                    self.notifyFailure(share, message: "Could not connect.\n\n\(error)")
+                    self.notifyFailure(share, message: "Could not connect.\n\n\(error.localizedDescription)")
                 }
             }
         }

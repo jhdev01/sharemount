@@ -1,0 +1,12 @@
+# macOS
+.DS_Store
+
+# Xcode project is generated from ShareMount/project.yml by XcodeGen
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+
+# Build output
+DerivedData/
+build/
+*.xcresult

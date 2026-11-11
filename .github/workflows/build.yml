@@ -1,0 +1,28 @@
+name: Build & test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: macos-14
+    defaults:
+      run:
+        working-directory: ShareMount
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build and test
+        run: |
+          xcodebuild test \
+            -project ShareMount.xcodeproj \
+            -scheme ShareMount \
+            -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO

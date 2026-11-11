@@ -13,7 +13,7 @@ in the Keychain after the first connect, so later mounts are silent.
 
 - macOS 13 (Ventura) or later
 - Xcode 15 or later (to build)
-- [XcodeGen](https://github.com/yonyz/XcodeGen) to generate the project file:
+- [XcodeGen](https://github.com/yonaskolb/XcodeGen) to generate the project file:
   `brew install xcodegen`
 
 ## Build & run
@@ -26,6 +26,25 @@ open ShareMount.xcodeproj  # then press ⌘R in Xcode
 
 In Xcode, select your development team under
 **Target → Signing & Capabilities** (Automatic signing) before running.
+
+The bundle identifier is `io.github.jhdev01.ShareMount` (set in `project.yml`).
+Change it there if you sign with a different identity — launch-at-login is
+tied to it, so pick one and keep it.
+
+## Tests
+
+The share-location parsing and mount-matching logic is covered by unit tests
+in `Tests/`. Run them with ⌘U in Xcode, or from the command line:
+
+```sh
+cd ShareMount
+xcodegen generate
+xcodebuild test -project ShareMount.xcodeproj -scheme ShareMount \
+  -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO
+```
+
+GitHub Actions runs the same build and tests on every push and pull request
+(`.github/workflows/build.yml`).
 
 > **Don't have XcodeGen?** You can build by hand instead: create a new macOS
 > **App** project in Xcode (language: Swift, interface: AppKit/XIB — it doesn't
@@ -40,7 +59,7 @@ In Xcode, select your development team under
 | --- | --- |
 | Menu bar item + dynamic menu | `NSStatusItem` / `NSMenu`, rebuilt on open (`StatusItemController`) |
 | Mounting SMB | `NetFSMountURLSync` from the NetFS framework (`MountManager`) |
-| "Is it connected?" | `getmntinfo` — matches mounted devices by host + share name |
+| "Is it connected?" | `getmntinfo` — parses each SMB device name and matches exact host + share name (`MountSource`) |
 | Unmounting | `NSWorkspace.unmountAndEjectDevice(at:)` |
 | Remembered credentials | Keychain internet-password items, keyed by host (`KeychainStore`) |
 | Add/edit/remove shares | SwiftUI `PreferencesView` in a hosted `NSWindow` |
@@ -63,9 +82,13 @@ there — only in the Keychain.
 
 ## Network location format
 
-Either of these works for the **Network location** field:
+Any of these work for the **Network location** field:
 
 ```
 smb://192.168.1.10/Media
 192.168.1.10/Media
+//nas.local/My Share
+\\nas\Media
 ```
+
+Share names may contain spaces; they're encoded automatically.

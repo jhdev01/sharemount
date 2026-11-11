@@ -1,6 +1,6 @@
 name: ShareMount
 options:
-  bundleIdPrefix: com.example
+  bundleIdPrefix: io.github.jhdev01
   deploymentTarget:
     macOS: "13.0"
   createIntermediateGroups: true
@@ -14,7 +14,7 @@ targets:
     settings:
       base:
         INFOPLIST_FILE: Sources/Info.plist
-        PRODUCT_BUNDLE_IDENTIFIER: com.example.ShareMount
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.jhdev01.ShareMount
         PRODUCT_NAME: ShareMount
         MARKETING_VERSION: "1.0"
         CURRENT_PROJECT_VERSION: "1"
@@ -28,3 +28,32 @@ targets:
     dependencies:
       - sdk: NetFS.framework
       - sdk: ServiceManagement.framework
+
+  # Unit tests for the pure-Foundation parsing code. The files under test are
+  # compiled straight into the test bundle (no app host), so the tests run
+  # without launching the menu bar app or needing code signing.
+  ShareMountTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Tests
+      - path: Sources/Models/Share.swift
+      - path: Sources/Models/MountSource.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.jhdev01.ShareMountTests
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: "5.0"
+
+schemes:
+  ShareMount:
+    build:
+      targets:
+        ShareMount: all
+        ShareMountTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - ShareMountTests
