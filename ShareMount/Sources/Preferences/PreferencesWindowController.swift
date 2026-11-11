@@ -13,7 +13,7 @@ final class PreferencesWindowController {
             let win = NSWindow(contentViewController: hosting)
             win.title = "ShareMount Preferences"
             win.styleMask = [.titled, .closable, .miniaturizable]
-            win.setContentSize(NSSize(width: 520, height: 360))
+            win.setContentSize(NSSize(width: 640, height: 480))
             win.isReleasedWhenClosed = false
             win.center()
             window = win

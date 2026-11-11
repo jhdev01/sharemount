@@ -115,7 +115,7 @@ enum MountManager {
         mountpoints?.release()
 
         switch status {
-        case 0:
+        case 0, Int32(EEXIST):      // EEXIST: already mounted — that's success too
             return
         case Int32(EAUTH), Int32(EACCES), Int32(EPERM), Int32(ENEEDAUTH):
             throw MountError.authRequired

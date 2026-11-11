@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory)
         installMainMenu()
         statusController = StatusItemController()
+        AutoConnector.shared.start()
     }
 
     /// An accessory app never shows its main menu, but AppKit still routes key

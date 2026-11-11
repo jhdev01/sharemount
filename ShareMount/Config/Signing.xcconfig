@@ -1,0 +1,10 @@
+// Signing settings shared by Debug and Release.
+//
+// Your Apple developer Team ID goes in Signing.local.xcconfig next to this
+// file (it's git-ignored, since it's specific to you). Keeping it there means
+// it survives `xcodegen generate`, which otherwise resets the Team you picked
+// in Xcode. ./install.sh creates it for you; or create it by hand containing:
+//
+//     DEVELOPMENT_TEAM = ABCDE12345
+//
+#include? "Signing.local.xcconfig"

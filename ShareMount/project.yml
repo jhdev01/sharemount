@@ -11,6 +11,9 @@ targets:
     platform: macOS
     sources:
       - path: Sources
+    configFiles:
+      Debug: Config/Signing.xcconfig
+      Release: Config/Signing.xcconfig
     settings:
       base:
         INFOPLIST_FILE: Sources/Info.plist

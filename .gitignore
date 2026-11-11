@@ -10,3 +10,6 @@ xcuserdata/
 DerivedData/
 build/
 *.xcresult
+
+# Per-developer signing (your Team ID) — see ShareMount/Config/Signing.xcconfig
+Signing.local.xcconfig

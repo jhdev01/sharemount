@@ -16,7 +16,7 @@ struct PreferencesView: View {
             Divider()
             footer
         }
-        .frame(minWidth: 520, minHeight: 360)
+        .frame(minWidth: 600, minHeight: 460)
         // Pick up shares added elsewhere (e.g. Browse Network → Add to Menu).
         .onReceive(ShareStore.shared.$shares) { latest in
             if latest != shares { shares = latest }
@@ -61,6 +61,23 @@ struct PreferencesView: View {
                 Text("Example: smb://192.168.1.10/Media")
                     .font(.caption)
                     .foregroundColor(.secondary)
+
+                Toggle("Connect automatically", isOn: Binding(
+                    get: { shares[index].autoConnect },
+                    set: { newValue in
+                        shares[index].autoConnect = newValue
+                        persist()
+                        if newValue { AutoConnector.shared.connectAll() }
+                    }))
+                Text("Reconnects when ShareMount starts, after the Mac wakes, and if the connection drops. Needs a saved password (below) unless the share allows guests.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if let host = shares[index].host {
+                    Divider().padding(.vertical, 4)
+                    PasswordSection(host: host).id(host)
+                }
             }
             .padding()
         } else {
@@ -108,5 +125,65 @@ struct PreferencesView: View {
 
     private func persist() {
         ShareStore.shared.replaceAll(shares)
+    }
+}
+
+/// Save, update or forget the Keychain password for a server. One password per
+/// server, shared by every share on it.
+private struct PasswordSection: View {
+    let host: String
+
+    @State private var savedUser: String?
+    @State private var username = ""
+    @State private var password = ""
+    @State private var status: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Sign-in for \(host)").font(.headline)
+
+            if let savedUser {
+                HStack {
+                    Label("Password saved for “\(savedUser)”", systemImage: "key.fill")
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Button("Forget") {
+                        KeychainStore.delete(server: host)
+                        self.savedUser = nil
+                        status = "Password removed."
+                    }
+                }
+            }
+
+            TextField("Username", text: $username)
+            SecureField("Password", text: $password)
+                .onSubmit(save)
+
+            HStack {
+                Button(savedUser == nil ? "Save Password" : "Update Password", action: save)
+                    .disabled(username.isEmpty || password.isEmpty)
+                if let status {
+                    Text(status).font(.caption).foregroundColor(.secondary)
+                }
+            }
+
+            Text("Stored in your Mac’s Keychain, never in ShareMount’s settings. It’s checked the next time the share connects.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .onAppear {
+            let saved = KeychainStore.load(server: host)
+            savedUser = saved?.username
+            username = saved?.username ?? ""
+        }
+    }
+
+    private func save() {
+        guard !username.isEmpty, !password.isEmpty else { return }
+        KeychainStore.save(Credentials(username: username, password: password), server: host)
+        savedUser = username
+        password = ""
+        status = "Saved."
     }
 }

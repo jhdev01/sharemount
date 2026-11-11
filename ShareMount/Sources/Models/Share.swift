@@ -2,11 +2,33 @@ import Foundation
 
 /// A single configured network share: a friendly name plus an SMB location.
 struct Share: Codable, Identifiable, Equatable {
-    var id = UUID()
+    var id: UUID
     var displayName: String
     /// What the user types, e.g. "smb://192.168.1.10/Media", "192.168.1.10/Media",
     /// "//nas/My Share" or "\\nas\Media".
     var location: String
+    /// Mount automatically at launch, after wake, and if the connection drops.
+    var autoConnect: Bool
+
+    init(id: UUID = UUID(), displayName: String, location: String, autoConnect: Bool = false) {
+        self.id = id
+        self.displayName = displayName
+        self.location = location
+        self.autoConnect = autoConnect
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, displayName, location, autoConnect
+    }
+
+    /// Tolerates settings saved by older versions (no `autoConnect` key).
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        displayName = try c.decode(String.self, forKey: .displayName)
+        location = try c.decode(String.self, forKey: .location)
+        autoConnect = try c.decodeIfPresent(Bool.self, forKey: .autoConnect) ?? false
+    }
 
     /// Normalised `smb://` URL with the path percent-encoded (so share names
     /// containing spaces work), or nil if the location can't be parsed.

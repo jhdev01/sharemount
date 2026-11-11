@@ -56,3 +56,20 @@ final class ShareRefersToTests: XCTestCase {
         XCTAssertFalse(share.refersTo(host: "nas2.local", shareName: "My Share"))
     }
 }
+
+final class ShareCodingTests: XCTestCase {
+    /// Settings saved before `autoConnect` existed must still load.
+    func testDecodesSettingsWithoutAutoConnect() throws {
+        let json = #"[{"id":"6F9619FF-8B86-D011-B42D-00C04FC964FF","displayName":"Media","location":"nas/Media"}]"#
+        let shares = try JSONDecoder().decode([Share].self, from: Data(json.utf8))
+        XCTAssertEqual(shares.count, 1)
+        XCTAssertEqual(shares[0].displayName, "Media")
+        XCTAssertFalse(shares[0].autoConnect)
+    }
+
+    func testRoundTripKeepsAutoConnect() throws {
+        let share = Share(displayName: "Media", location: "nas/Media", autoConnect: true)
+        let decoded = try JSONDecoder().decode(Share.self, from: JSONEncoder().encode(share))
+        XCTAssertEqual(decoded, share)
+    }
+}

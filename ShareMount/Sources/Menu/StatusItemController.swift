@@ -42,7 +42,13 @@ final class StatusItemController: NSObject, NSMenuDelegate {
                                       keyEquivalent: "")
                 item.target = self
                 item.representedObject = share
-                item.state = MountManager.isMounted(share) ? .on : .off
+                let mounted = MountManager.isMounted(share)
+                item.state = mounted ? .on : .off
+                if !mounted, let problem = AutoConnector.shared.lastErrors[share.id] {
+                    item.image = NSImage(systemSymbolName: "exclamationmark.triangle",
+                                         accessibilityDescription: "Problem")
+                    item.toolTip = problem
+                }
                 menu.addItem(item)
             }
         }
@@ -73,8 +79,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     @objc private func toggleShare(_ sender: NSMenuItem) {
         guard let share = sender.representedObject as? Share else { return }
         if MountManager.isMounted(share) {
+            AutoConnector.shared.userDidDisconnect(share)
             disconnect(share)
         } else {
+            AutoConnector.shared.userDidConnect(share)
             connect(share, credentials: KeychainStore.load(server: share.host ?? ""))
         }
     }

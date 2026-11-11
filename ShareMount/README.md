@@ -9,6 +9,8 @@ in the Keychain after the first connect, so later mounts are silent.
 - **Browse Network…** finds computers and file servers nearby, lists their
   shared folders and drives, and connects or adds them to the menu in one click.
 - Add / edit / remove shares in a simple Preferences window.
+- **Connect automatically**: per share, reconnects at launch, after wake, when
+  the network comes back, and if the connection drops — using the saved password.
 - Optional launch at login.
 
 ## Requirements
@@ -18,7 +20,23 @@ in the Keychain after the first connect, so later mounts are silent.
 - [XcodeGen](https://github.com/yonaskolb/XcodeGen) to generate the project file:
   `brew install xcodegen`
 
-## Build & run
+## Install (the easy way)
+
+```sh
+cd ShareMount
+./install.sh
+```
+
+This builds a Release copy, puts it in **/Applications**, and launches it. Run
+it again after pulling changes to update. It finds your Apple Team ID from the
+"Apple Development" certificate Xcode created and saves it to
+`Config/Signing.local.xcconfig` (not committed), so a stable signature is used
+and the Keychain doesn't keep asking for permission after updates.
+
+Then in **Preferences**, turn on **Launch at login**, and for each share save
+its password and turn on **Connect automatically**.
+
+## Build & run (for development)
 
 ```sh
 cd ShareMount
@@ -26,8 +44,10 @@ xcodegen generate          # creates ShareMount.xcodeproj from project.yml
 open ShareMount.xcodeproj  # then press ⌘R in Xcode
 ```
 
-In Xcode, select your development team under
-**Target → Signing & Capabilities** (Automatic signing) before running.
+Signing uses the Team ID in `Config/Signing.local.xcconfig` (created by
+`./install.sh`, or by hand with one line: `DEVELOPMENT_TEAM = ABCDE12345`).
+Setting the Team in Xcode's **Signing & Capabilities** tab also works, but
+`xcodegen generate` resets it; the xcconfig file doesn't get reset.
 
 The bundle identifier is `io.github.jhdev01.ShareMount` (set in `project.yml`).
 Change it there if you sign with a different identity — launch-at-login is
@@ -63,6 +83,7 @@ GitHub Actions runs the same build and tests on every push and pull request
 | Mounting SMB | `NetFSMountURLSync` from the NetFS framework (`MountManager`) |
 | "Is it connected?" | `getmntinfo` — parses each SMB device name and matches exact host + share name (`MountSource`) |
 | Unmounting | `NSWorkspace.unmountAndEjectDevice(at:)` |
+| Auto-connect | `AutoConnector`: at launch, on `NWPathMonitor` network-up, on wake, and every 2 min |
 | Remembered credentials | Keychain internet-password items, keyed by host (`KeychainStore`) |
 | Finding computers | Bonjour `_smb._tcp` browsing with `NetServiceBrowser` (`NetworkBrowser`) |
 | Listing a computer's shares | `/usr/bin/smbutil view` — macOS has no public API for this (`ShareLister`) |
