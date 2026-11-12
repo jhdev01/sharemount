@@ -8,9 +8,10 @@ struct Share: Codable, Identifiable, Equatable {
     /// "//nas/My Share" or "\\nas\Media".
     var location: String
     /// Mount automatically at launch, after wake, and if the connection drops.
+    /// On by default: keeping drives mounted is the point of the app.
     var autoConnect: Bool
 
-    init(id: UUID = UUID(), displayName: String, location: String, autoConnect: Bool = false) {
+    init(id: UUID = UUID(), displayName: String, location: String, autoConnect: Bool = true) {
         self.id = id
         self.displayName = displayName
         self.location = location
@@ -27,7 +28,7 @@ struct Share: Codable, Identifiable, Equatable {
         id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
         displayName = try c.decode(String.self, forKey: .displayName)
         location = try c.decode(String.self, forKey: .location)
-        autoConnect = try c.decodeIfPresent(Bool.self, forKey: .autoConnect) ?? false
+        autoConnect = try c.decodeIfPresent(Bool.self, forKey: .autoConnect) ?? true
     }
 
     /// Normalised `smb://` URL with the path percent-encoded (so share names

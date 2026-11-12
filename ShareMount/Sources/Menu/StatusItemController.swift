@@ -67,6 +67,13 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         prefs.target = self
         menu.addItem(prefs)
 
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+        let about = NSMenuItem(title: "ShareMount \(version)", action: nil, keyEquivalent: "")
+        about.isEnabled = false
+        about.toolTip = Bundle.main.bundlePath
+        menu.addItem(.separator())
+        menu.addItem(about)
+
         let quit = NSMenuItem(title: "Quit ShareMount",
                               action: #selector(quit),
                               keyEquivalent: "q")

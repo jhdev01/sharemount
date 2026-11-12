@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory)
         installMainMenu()
         statusController = StatusItemController()
+        LoginItem.syncAtLaunch()
         AutoConnector.shared.start()
     }
 

@@ -65,7 +65,8 @@ final class AutoConnector {
     /// Try to mount every auto-connect share that isn't mounted. Main thread.
     func connectAll() {
         let shares = ShareStore.shared.shares.filter {
-            $0.autoConnect && !userDisconnected.contains($0.id) && !inFlight.contains($0.id)
+            $0.autoConnect && $0.shareName != nil
+                && !userDisconnected.contains($0.id) && !inFlight.contains($0.id)
         }
         for share in shares {
             inFlight.insert(share.id)

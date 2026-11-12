@@ -64,11 +64,11 @@ final class ShareCodingTests: XCTestCase {
         let shares = try JSONDecoder().decode([Share].self, from: Data(json.utf8))
         XCTAssertEqual(shares.count, 1)
         XCTAssertEqual(shares[0].displayName, "Media")
-        XCTAssertFalse(shares[0].autoConnect)
+        XCTAssertTrue(shares[0].autoConnect)   // on by default
     }
 
     func testRoundTripKeepsAutoConnect() throws {
-        let share = Share(displayName: "Media", location: "nas/Media", autoConnect: true)
+        let share = Share(displayName: "Media", location: "nas/Media", autoConnect: false)
         let decoded = try JSONDecoder().decode(Share.self, from: JSONEncoder().encode(share))
         XCTAssertEqual(decoded, share)
     }
