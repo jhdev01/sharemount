@@ -10,16 +10,21 @@ struct Share: Codable, Identifiable, Equatable {
     /// Mount automatically at launch, after wake, and if the connection drops.
     /// On by default: keeping drives mounted is the point of the app.
     var autoConnect: Bool
+    /// Friendly name of the computer it's on, e.g. "Halderman iMac" (from
+    /// Bonjour when added via Add a Drive). Nil = derive one from the host.
+    var serverName: String?
 
-    init(id: UUID = UUID(), displayName: String, location: String, autoConnect: Bool = true) {
+    init(id: UUID = UUID(), displayName: String, location: String,
+         autoConnect: Bool = true, serverName: String? = nil) {
         self.id = id
         self.displayName = displayName
         self.location = location
         self.autoConnect = autoConnect
+        self.serverName = serverName
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, displayName, location, autoConnect
+        case id, displayName, location, autoConnect, serverName
     }
 
     /// Tolerates settings saved by older versions (no `autoConnect` key).
@@ -29,6 +34,18 @@ struct Share: Codable, Identifiable, Equatable {
         displayName = try c.decode(String.self, forKey: .displayName)
         location = try c.decode(String.self, forKey: .location)
         autoConnect = try c.decodeIfPresent(Bool.self, forKey: .autoConnect) ?? true
+        serverName = try c.decodeIfPresent(String.self, forKey: .serverName)
+    }
+
+    /// Name to group and label the drive by: the saved computer name, else a
+    /// tidied host ("halderman-imac.local" → "Halderman Imac").
+    var computerName: String {
+        if let serverName, !serverName.isEmpty { return serverName }
+        guard let host else { return "Unknown Computer" }
+        var name = Self.normalizedHost(host)
+        guard name.hasSuffix(".local") else { return name }
+        name.removeLast(".local".count)
+        return name.replacingOccurrences(of: "-", with: " ").capitalized
     }
 
     /// Normalised `smb://` URL with the path percent-encoded (so share names

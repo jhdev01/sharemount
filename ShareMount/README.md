@@ -1,17 +1,20 @@
 # ShareMount
 
-A tiny macOS **menu bar app** for connecting to SMB network shares. It lives in
-the system tray: click a share's name to mount it, click again to disconnect.
-Each share shows a ✓ when it's currently connected. Credentials are remembered
-in the Keychain after the first connect, so later mounts are silent.
+A small macOS **menu bar app** that keeps drives from other computers (SMB
+shares — other Macs, NAS boxes, Windows PCs) connected.
 
-- Menu-bar-only agent — no Dock icon, stays out of the way.
-- **Browse Network…** finds computers and file servers nearby, lists their
-  shared folders and drives, and connects or adds them to the menu in one click.
-- Add / edit / remove shares in a simple Preferences window.
-- **Connect automatically**: per share, reconnects at launch, after wake, when
-  the network comes back, and if the connection drops — using the saved password.
-- Optional launch at login.
+- **Menu bar panel** — every drive, grouped by computer, with its status in
+  plain words ("Connected · 3.2 TB free", "Password needed", "Server asleep…")
+  and the button you need right there: Open, Disconnect, Retry, Sign In.
+  The menu bar icon gets a warning badge when a drive needs attention.
+- **Keep connected** (on by default) — connects at login, after sleep, when the
+  network comes back, and every minute while a drive is unavailable, using the
+  password saved in your Keychain. Never pops up prompts on its own.
+- **Add a Drive** — finds computers on your network, lists what each shares,
+  and adds the ones you tick.
+- **Settings** — per-drive page (name, location, Keep connected, password) and
+  General (open at login).
+- Opens at login by default. No Dock icon.
 
 ## Requirements
 
@@ -33,8 +36,8 @@ it again after pulling changes to update. It finds your Apple Team ID from the
 `Config/Signing.local.xcconfig` (not committed), so a stable signature is used
 and the Keychain doesn't keep asking for permission after updates.
 
-Then in **Preferences**, turn on **Launch at login**, and for each share save
-its password and turn on **Connect automatically**.
+On first launch, **Add a Drive** opens: pick the computer, sign in, tick the
+drives. They stay connected from then on, including after restarts.
 
 ## Build & run (for development)
 
@@ -79,15 +82,17 @@ GitHub Actions runs the same build and tests on every push and pull request
 
 | Concern | Implementation |
 | --- | --- |
-| Menu bar item + dynamic menu | `NSStatusItem` / `NSMenu`, rebuilt on open (`StatusItemController`) |
+| Menu bar icon + panel | `NSStatusItem` + `NSPopover` hosting SwiftUI `MenuPanelView` (`StatusItemController`) |
+| Drive status | `ConnectionManager` publishes a `DriveState` per drive from the mount table (refreshed every 5 s and on mount/unmount) |
 | Mounting SMB | `NetFSMountURLSync` from the NetFS framework (`MountManager`) |
 | "Is it connected?" | `getmntinfo` — parses each SMB device name and matches exact host + share name (`MountSource`) |
 | Unmounting | `NSWorkspace.unmountAndEjectDevice(at:)` |
-| Auto-connect | `AutoConnector`: at launch, on `NWPathMonitor` network-up, on wake, and every 2 min |
+| Keep connected | `ConnectionManager`: at launch, on `NWPathMonitor` network-up, on wake, and every 60 s |
 | Remembered credentials | Keychain internet-password items, keyed by host (`KeychainStore`) |
 | Finding computers | Bonjour `_smb._tcp` browsing with `NetServiceBrowser` (`NetworkBrowser`) |
 | Listing a computer's shares | `/usr/bin/smbutil view` — macOS has no public API for this (`ShareLister`) |
-| Add/edit/remove shares | SwiftUI `PreferencesView` in a hosted `NSWindow` |
+| Add a Drive | `AddDriveView` + `AddDriveModel` |
+| Settings | SwiftUI `NavigationSplitView` (`SettingsView`, `DriveDetailView`, `GeneralSettingsView`) |
 | Launch at login | `SMAppService.mainApp.register()` (`LoginItem`) |
 | No Dock icon | `LSUIElement` + `NSApp.setActivationPolicy(.accessory)` |
 
@@ -100,16 +105,15 @@ there — only in the Keychain.
   the App Sandbox, so this is a personal/internal tool, not an App Store build.
 - **Launch at login** is most reliable when the app lives in `/Applications`.
   macOS may show the toggle under System Settings → General → Login Items.
-- Connection state refreshes when you open the menu (it's read from the
-  kernel's mount table, not a live socket).
-- First connect shows a username/password prompt; after a successful mount the
-  credentials are saved to the Keychain and reused silently.
+- Connection state comes from the kernel's mount table, so a server that
+  vanished without unmounting can still show as connected until macOS notices.
+- Passwords are per computer: one saved password is used for every drive on it.
 
-## Browsing the network
+## Adding a drive
 
-Choose **Browse Network…** (⌘B) from the menu bar icon.
+Choose **Add a Drive…** (⌘N) from the menu bar panel or Settings.
 
-- **Nearby** lists every computer advertising SMB file sharing: Macs with
+- **On your network** lists every computer advertising SMB file sharing: Macs with
   File Sharing turned on and most NAS boxes. The first time, macOS asks to let
   ShareMount find devices on your local network — click **Allow**. (If you
   missed it: System Settings → Privacy & Security → Local Network.)
@@ -117,12 +121,12 @@ Choose **Browse Network…** (⌘B) from the menu bar icon.
   name or IP address in the box under the list and press **Go**.
 - Pick a computer to see its shared folders and drives. If it asks you to sign
   in, use an account on *that* computer; it's saved in your Keychain.
-- **Connect** mounts a share now. **Add to Menu** saves it so it's one click
-  from the menu bar next time.
+- Tick the drives you want and click **Add**. With **Keep these connected
+  automatically** on (the default) they connect right away and stay connected.
 
 **To reach a hard drive plugged into another Mac**, share it on that Mac
 first: System Settings → General → Sharing → File Sharing (turn on) → ⓘ → **+**
-under Shared Folders → choose the drive. It then shows up in Browse Network
+under Shared Folders → choose the drive. It then shows up in Add a Drive
 like any other share.
 
 When signing in, the username and password are passed to `smbutil` on its
@@ -132,7 +136,7 @@ shared one.
 
 ## Network location format
 
-Any of these work for the **Network location** field:
+Any of these work for a drive's **Location** (Settings → drive → Change…):
 
 ```
 smb://192.168.1.10/Media

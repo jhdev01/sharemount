@@ -3,15 +3,38 @@ import Cocoa
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var statusController: StatusItemController?
+    private let addDriveWindow = AddDriveWindowController()
+    private lazy var settingsWindow = SettingsWindowController { [weak self] in
+        self?.showAddDrive()
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // `.accessory` = menu-bar-only agent: no Dock icon, no app-switcher
         // entry. This pairs with `LSUIElement` in Info.plist.
         NSApp.setActivationPolicy(.accessory)
         installMainMenu()
-        statusController = StatusItemController()
         LoginItem.syncAtLaunch()
-        AutoConnector.shared.start()
+        ConnectionManager.shared.start()
+        statusController = StatusItemController(
+            addDrive: { [weak self] in self?.showAddDrive() },
+            openSettings: { [weak self] id in self?.openSettings(selecting: id) })
+
+        // First run: nothing configured yet, so go straight to adding a drive.
+        if ShareStore.shared.shares.isEmpty {
+            showAddDrive()
+        }
+    }
+
+    @objc func showAddDrive() {
+        addDriveWindow.show()
+    }
+
+    @objc func showSettings() {
+        openSettings(selecting: nil)
+    }
+
+    private func openSettings(selecting id: Share.ID?) {
+        settingsWindow.show(selecting: id)
     }
 
     /// An accessory app never shows its main menu, but AppKit still routes key
@@ -21,6 +44,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let mainMenu = NSMenu()
 
         let appMenu = NSMenu()
+        appMenu.addItem(withTitle: "Settings…", action: #selector(showSettings), keyEquivalent: ",")
+        appMenu.addItem(withTitle: "Add a Drive…", action: #selector(showAddDrive), keyEquivalent: "n")
+        appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Quit ShareMount",
                         action: #selector(NSApplication.terminate(_:)),
                         keyEquivalent: "q")

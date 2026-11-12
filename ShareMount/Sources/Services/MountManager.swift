@@ -3,8 +3,10 @@ import NetFS
 import AppKit
 
 struct MountedVolume {
-    let from: String   // device, e.g. "//user@host/Share"
-    let path: String   // mountpoint, e.g. "/Volumes/Share"
+    let from: String        // device, e.g. "//user@host/Share"
+    let path: String        // mountpoint, e.g. "/Volumes/Share"
+    let freeBytes: Int64    // available to this user
+    let totalBytes: Int64
 }
 
 enum MountError: Error, LocalizedError {
@@ -61,9 +63,12 @@ enum MountManager {
         var result: [MountedVolume] = []
         for i in 0..<Int(count) {
             var entry = buffer[i]
+            let blockSize = UInt64(entry.f_bsize)
             result.append(
                 MountedVolume(from: cString(&entry.f_mntfromname),
-                              path: cString(&entry.f_mntonname))
+                              path: cString(&entry.f_mntonname),
+                              freeBytes: Int64(clamping: entry.f_bavail &* blockSize),
+                              totalBytes: Int64(clamping: entry.f_blocks &* blockSize))
             )
         }
         return result

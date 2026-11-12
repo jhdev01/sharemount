@@ -73,3 +73,26 @@ final class ShareCodingTests: XCTestCase {
         XCTAssertEqual(decoded, share)
     }
 }
+
+final class ComputerNameTests: XCTestCase {
+    func testUsesSavedServerName() {
+        let share = Share(displayName: "5 TB", location: "smb://halderman-imac.local/5 TB",
+                          serverName: "Halderman iMac")
+        XCTAssertEqual(share.computerName, "Halderman iMac")
+    }
+
+    func testTidiesBonjourHostName() {
+        let share = Share(displayName: "5 TB", location: "smb://halderman-imac.local/5 TB")
+        XCTAssertEqual(share.computerName, "Halderman Imac")
+    }
+
+    func testKeepsIPAddress() {
+        XCTAssertEqual(Share(displayName: "x", location: "192.168.1.20/Media").computerName, "192.168.1.20")
+    }
+
+    func testServerNameSurvivesSaving() throws {
+        let share = Share(displayName: "x", location: "nas/x", serverName: "Office NAS")
+        let decoded = try JSONDecoder().decode(Share.self, from: JSONEncoder().encode(share))
+        XCTAssertEqual(decoded.serverName, "Office NAS")
+    }
+}
