@@ -58,6 +58,7 @@ fi
 echo "Installing to ${DEST}..."
 rm -rf "${DEST}"
 ditto "${BUILT}" "${DEST}"
+touch "${DEST}"   # nudge Finder/Dock to pick up a changed icon
 
 open "${DEST}"
 echo "Done. ShareMount is running from /Applications — look for its icon in the menu bar."
