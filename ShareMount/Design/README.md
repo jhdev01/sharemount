@@ -1,6 +1,6 @@
 # App icon
 
-`AppIcon.svg` is the source for the app icon (1024×1024, macOS icon grid: an
+`AppIcon.svg` is the source (the "3A Night" variant made with `icon-generator.py`) for the app icon (1024×1024, macOS icon grid: an
 824 px rounded square centred on the canvas). The PNGs in
 `Sources/Assets.xcassets/AppIcon.appiconset/` are rendered from it.
 
