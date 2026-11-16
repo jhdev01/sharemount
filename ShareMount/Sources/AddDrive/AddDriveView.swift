@@ -120,7 +120,7 @@ struct AddDriveView: View {
                     Button("Try Again", action: model.reload)
                 }
                 Divider().frame(width: 300)
-                addByNameSection
+                addByNameSection(usesTypedPassword: false)
             }
             .frame(maxWidth: 340)
             .padding()
@@ -250,14 +250,17 @@ struct AddDriveView: View {
                     Button("Try Again", action: model.reload)
                 }
             }
-            addByNameSection
+            addByNameSection(usesTypedPassword: true)
         }
     }
 
-    /// Type the drive's name and connect with the username/password above.
-    private var addByNameSection: some View {
+    /// Type the drive's name and connect: with the username/password typed
+    /// above if there's a sign-in form, else with the saved password.
+    private func addByNameSection(usesTypedPassword: Bool) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Or type the drive’s name to connect to it directly with the username and password above.")
+            Text(usesTypedPassword
+                 ? "Or type the drive’s name to connect to it directly with the username and password above. You’ll see the result in the menu bar panel."
+                 : "Or type the drive’s name to connect to it directly with your saved password. You’ll see the result in the menu bar panel.")
                 .font(.callout).foregroundColor(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             HStack {

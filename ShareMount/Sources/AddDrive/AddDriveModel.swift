@@ -80,9 +80,12 @@ final class AddDriveModel: ObservableObject {
                     if case ShareListError.authRequired(let detail)? = error as? ShareListError {
                         // Don't claim the password is wrong: smbutil can fail to sign
                         // in where Finder succeeds. Say what happened and offer ways on.
+                        // A first visit with no password is normal: just ask. If a
+                        // password was used (typed, or saved), say it failed and why.
+                        let triedPassword = credentials != nil
                         self.state = .needsSignIn(
-                            message: fromSignIn ? "Couldn’t sign in to list the drives." : nil,
-                            detail: fromSignIn ? detail : nil)
+                            message: triedPassword ? "Couldn’t sign in to list the drives." : nil,
+                            detail: triedPassword ? detail : nil)
                     } else {
                         self.state = .failed(error.localizedDescription)
                     }
