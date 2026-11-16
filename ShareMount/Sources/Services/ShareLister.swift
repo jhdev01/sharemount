@@ -1,7 +1,8 @@
 import Foundation
 
 enum ShareListError: Error, LocalizedError {
-    case authRequired
+    /// smbutil reported an authentication problem; `detail` is its own words.
+    case authRequired(detail: String?)
     case timedOut
     case failed(String)
 
@@ -40,14 +41,12 @@ enum ShareLister {
         let output = String(decoding: stdout.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
         var errors = String(decoding: stderr.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
         guard process.terminationStatus == 0 else {
-            if let password = credentials?.password, !password.isEmpty {
-                errors = errors.replacingOccurrences(of: password, with: "•••")
-            }
+            errors = SMBShareList.maskingPassword(in: errors, credentials: credentials)
+            let message = errors.trimmingCharacters(in: .whitespacesAndNewlines)
             let lower = (errors + output).lowercased()
             if lower.contains("auth") || lower.contains("permission denied") || lower.contains("password") {
-                throw ShareListError.authRequired
+                throw ShareListError.authRequired(detail: message.isEmpty ? nil : message)
             }
-            let message = errors.trimmingCharacters(in: .whitespacesAndNewlines)
             throw ShareListError.failed(message.isEmpty
                 ? "Couldn’t list shares (smbutil exited with status \(process.terminationStatus))."
                 : message)

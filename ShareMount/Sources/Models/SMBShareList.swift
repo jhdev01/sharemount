@@ -62,7 +62,19 @@ enum SMBShareList {
         return (name, type)
     }
 
-    private static func encode(_ text: String, _ allowed: CharacterSet) -> String {
+    /// Remove the password (as typed, and as it appears percent-encoded or
+    /// inside any `//user:password@host` URL) from text before showing it.
+    static func maskingPassword(in text: String, credentials: Credentials?) -> String {
+        var result = text.replacingOccurrences(
+            of: #"(//[^\s/:@]*):[^\s@]*@"#, with: "$1:•••@", options: .regularExpression)
+        if let password = credentials?.password, !password.isEmpty {
+            result = result.replacingOccurrences(of: password, with: "•••")
+            result = result.replacingOccurrences(of: encode(password, .urlPasswordAllowed), with: "•••")
+        }
+        return result
+    }
+
+    static func encode(_ text: String, _ allowed: CharacterSet) -> String {
         var set = allowed
         set.remove(charactersIn: ":@/?#")   // keep ";" so "DOMAIN;user" works
         return text.addingPercentEncoding(withAllowedCharacters: set) ?? text

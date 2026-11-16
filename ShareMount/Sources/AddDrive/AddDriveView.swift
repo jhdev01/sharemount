@@ -12,6 +12,7 @@ struct AddDriveView: View {
     @State private var username = ""
     @State private var password = ""
     @State private var keepConnected = true
+    @State private var driveName = ""
 
     var body: some View {
         VStack(spacing: 0) {
@@ -112,13 +113,27 @@ struct AddDriveView: View {
         case .loading:
             progress("Asking \(model.target?.title ?? "the computer") what it shares…")
         case .failed(let text):
-            VStack(spacing: 10) {
+            VStack(spacing: 14) {
                 Text(text).foregroundColor(.secondary).multilineTextAlignment(.center)
-                Button("Try Again", action: model.reload)
+                HStack {
+                    Button("Open in Finder", action: model.openInFinder)
+                    Button("Try Again", action: model.reload)
+                }
+                Divider().frame(width: 300)
+                addByNameSection
             }
+            .frame(maxWidth: 340)
             .padding()
-        case .needsSignIn(let text):
-            signInForm(message: text)
+        case .needsSignIn(let text, let detail):
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    signInForm(message: text, detail: detail)
+                    Divider()
+                    workaroundsSection
+                }
+                .frame(maxWidth: 320)
+                .padding()
+            }
         case .loaded(let names):
             if names.isEmpty {
                 message("\(model.target?.title ?? "This computer") isn’t sharing any folders or drives with this account.")
@@ -178,7 +193,7 @@ struct AddDriveView: View {
         .padding(.vertical, 10)
     }
 
-    private func signInForm(message text: String?) -> some View {
+    private func signInForm(message text: String?, detail: String?) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Sign in to \(model.target?.title ?? "this computer")").font(.headline)
             Text("Use an account on that computer. It’s saved in your Keychain.")
@@ -186,6 +201,13 @@ struct AddDriveView: View {
                 .foregroundColor(.secondary)
             if let text {
                 Text(text).foregroundColor(Color(nsColor: .systemRed)).font(.callout)
+            }
+            if let detail {
+                Text(detail)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundColor(.secondary)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             TextField("Username", text: $username)
                 .textFieldStyle(.roundedBorder)
@@ -199,18 +221,60 @@ struct AddDriveView: View {
                     .disabled(username.isEmpty)
             }
         }
-        .frame(maxWidth: 300)
-        .padding()
         .onAppear {
             if username.isEmpty { username = model.savedUsername }
-            password = ""
         }
+    }
+
+    /// Typed-in credentials, or nil if none were entered.
+    private var typedCredentials: Credentials? {
+        username.isEmpty ? nil : Credentials(username: username, password: password)
     }
 
     private func signIn() {
         guard !username.isEmpty else { return }
         model.signIn(Credentials(username: username, password: password))
-        password = ""
+        // Keep the password: "Connect by Name" below may need it.
+    }
+
+    /// Shown under the sign-in form: ways forward when the drive list won't load.
+    private var workaroundsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Still not working?").font(.headline)
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Sign in with Finder, then come back and click Try Again.")
+                    .font(.callout).foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack {
+                    Button("Open in Finder", action: model.openInFinder)
+                    Button("Try Again", action: model.reload)
+                }
+            }
+            addByNameSection
+        }
+    }
+
+    /// Type the drive's name and connect with the username/password above.
+    private var addByNameSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Or type the drive’s name to connect to it directly with the username and password above.")
+                .font(.callout).foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                TextField("Drive name, e.g. 5 TB", text: $driveName)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit(connectByName)
+                Button("Connect", action: connectByName)
+                    .disabled(driveName.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+    }
+
+    private func connectByName() {
+        if model.addByName(driveName, credentials: typedCredentials, keepConnected: keepConnected) {
+            driveName = ""
+            onDone()
+        }
     }
 
     private func message(_ text: String) -> some View {

@@ -46,4 +46,14 @@ final class SMBShareListTests: XCTestCase {
             SMBShareList.smbutilURL(host: "pc", credentials: Credentials(username: "CORP;joey", password: "")),
             "//CORP;joey@pc")
     }
+
+    func testMasksPasswordInErrorText() {
+        let creds = Credentials(username: "joey", password: "p@ss word")
+        let raw = "smbutil: server rejected //joey:p%40ss%20word@imac.local (p@ss word): Authentication error"
+        let masked = SMBShareList.maskingPassword(in: raw, credentials: creds)
+        XCTAssertFalse(masked.contains("p@ss word"))
+        XCTAssertFalse(masked.contains("p%40ss%20word"))
+        XCTAssertTrue(masked.contains("//joey:•••@imac.local"))
+        XCTAssertTrue(masked.contains("Authentication error"))
+    }
 }

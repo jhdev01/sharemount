@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 
 /// The computer picked in Add a Drive.
 struct BrowseTarget: Equatable {
@@ -14,7 +14,8 @@ final class AddDriveModel: ObservableObject {
         case idle
         case resolving
         case loading
-        case needsSignIn(message: String?)
+        /// `detail` is the system's own error text, shown small for diagnosis.
+        case needsSignIn(message: String?, detail: String?)
         case loaded([String])
         case failed(String)
     }
@@ -51,7 +52,7 @@ final class AddDriveModel: ObservableObject {
     /// "Use a different account…"
     func switchAccount() {
         generation += 1
-        state = .needsSignIn(message: nil)
+        state = .needsSignIn(message: nil, detail: nil)
     }
 
     var savedUsername: String {
@@ -75,13 +76,44 @@ final class AddDriveModel: ObservableObject {
                     let addable = shares.filter { !self.isAdded($0) }
                     self.selected = addable.count == 1 ? Set(addable) : []
                     self.state = .loaded(shares)
-                case .failure(ShareListError.authRequired):
-                    self.state = .needsSignIn(message: fromSignIn ? "The username or password was incorrect." : nil)
                 case .failure(let error):
-                    self.state = .failed(error.localizedDescription)
+                    if case ShareListError.authRequired(let detail)? = error as? ShareListError {
+                        // Don't claim the password is wrong: smbutil can fail to sign
+                        // in where Finder succeeds. Say what happened and offer ways on.
+                        self.state = .needsSignIn(
+                            message: fromSignIn ? "Couldn’t sign in to list the drives." : nil,
+                            detail: fromSignIn ? detail : nil)
+                    } else {
+                        self.state = .failed(error.localizedDescription)
+                    }
                 }
             }
         }
+    }
+
+    // MARK: Ways past a listing that won't sign in
+
+    /// Let Finder sign in (its login works where smbutil's may not), then
+    /// the user comes back and tries again.
+    func openInFinder() {
+        guard let host = target?.host, let url = URL(string: "smb://\(host)") else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    /// Add a drive by typing its name, and connect it with these credentials.
+    /// macOS's own connection (NetFS, as Finder uses) checks the password; if
+    /// it works it's saved to the Keychain, otherwise the panel shows why.
+    @discardableResult
+    func addByName(_ rawName: String, credentials: Credentials?, keepConnected: Bool) -> Bool {
+        let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard let target, let host = target.host, !name.isEmpty, !isAdded(name) else { return false }
+        let share = Share(displayName: name, location: "smb://\(host)/\(name)",
+                          autoConnect: keepConnected, serverName: target.title)
+        guard share.shareName != nil else { return false }
+        ShareStore.shared.add([share])
+        ConnectionManager.shared.connect(share, credentials: credentials)
+        return true
     }
 
     // MARK: Adding
