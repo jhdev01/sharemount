@@ -49,15 +49,18 @@ final class StatusItemController: NSObject {
         popover.performClose(nil)
     }
 
-    /// Plain drive icon; a warning badge when a drive needs attention.
+    /// One-colour version of the app icon (drive inside the keep-connected
+    /// arrows); a dot badge when a drive needs attention. Template images, so
+    /// macOS tints them for light/dark menu bars.
     private func updateIcon() {
         guard let button = statusItem.button else { return }
         let needsAttention = ConnectionManager.shared.states.values.contains { $0.needsAttention }
-        let name = needsAttention ? "externaldrive.badge.exclamationmark"
-                                  : "externaldrive.connected.to.line.below"
-        let image = NSImage(systemSymbolName: name, accessibilityDescription: "ShareMount")
+        let image = NSImage(named: needsAttention ? "MenuBarIconAlert" : "MenuBarIcon")
             ?? NSImage(systemSymbolName: "externaldrive", accessibilityDescription: "ShareMount")
         image?.isTemplate = true
+        image?.size = NSSize(width: 18, height: 18)
+        image?.accessibilityDescription = needsAttention
+            ? "ShareMount, a drive needs attention" : "ShareMount"
         button.image = image
         button.toolTip = needsAttention ? "ShareMount — a drive needs attention" : "ShareMount"
     }
