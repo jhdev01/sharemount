@@ -13,18 +13,23 @@ struct Share: Codable, Identifiable, Equatable {
     /// Friendly name of the computer it's on, e.g. "Halderman iMac" (from
     /// Bonjour when added via Add a Drive). Nil = derive one from the host.
     var serverName: String?
+    /// Host to use when the home address can't be reached, e.g. the iMac's
+    /// Tailscale name "halderman-imac.tail1234.ts.net". nil = not set yet (may
+    /// be filled in from Tailscale automatically); "" = turned off by the user.
+    var awayHost: String?
 
     init(id: UUID = UUID(), displayName: String, location: String,
-         autoConnect: Bool = true, serverName: String? = nil) {
+         autoConnect: Bool = true, serverName: String? = nil, awayHost: String? = nil) {
         self.id = id
         self.displayName = displayName
         self.location = location
         self.autoConnect = autoConnect
         self.serverName = serverName
+        self.awayHost = awayHost
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, displayName, location, autoConnect, serverName
+        case id, displayName, location, autoConnect, serverName, awayHost
     }
 
     /// Tolerates settings saved by older versions (no `autoConnect` key).
@@ -35,6 +40,44 @@ struct Share: Codable, Identifiable, Equatable {
         location = try c.decode(String.self, forKey: .location)
         autoConnect = try c.decodeIfPresent(Bool.self, forKey: .autoConnect) ?? true
         serverName = try c.decodeIfPresent(String.self, forKey: .serverName)
+        awayHost = try c.decodeIfPresent(String.self, forKey: .awayHost)
+    }
+
+    // MARK: Away (e.g. Tailscale) address
+
+    /// The away host if one is set and in use.
+    var activeAwayHost: String? {
+        guard let awayHost else { return nil }
+        let trimmed = awayHost.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    /// The same drive reached through the away host (same id, path and name).
+    var awayShare: Share? {
+        guard let awayHost = activeAwayHost, let url,
+              var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        else { return nil }
+        components.host = awayHost
+        guard let awayURL = components.url else { return nil }
+        var copy = self
+        copy.location = awayURL.absoluteString
+        copy.awayHost = ""
+        return copy
+    }
+
+    /// Every host this drive can be mounted from (home first).
+    var allHosts: [String] {
+        [host, activeAwayHost].compactMap { $0 }
+    }
+
+    /// Friendly name for how an away host connects ("Tailscale" for its
+    /// names and 100.64.0.0/10 addresses).
+    static func awayRouteName(for host: String) -> String {
+        let h = normalizedHost(host)
+        if h.hasSuffix(".ts.net") { return "Tailscale" }
+        let parts = h.split(separator: ".").compactMap { Int($0) }
+        if parts.count == 4, parts[0] == 100, (64...127).contains(parts[1]) { return "Tailscale" }
+        return "away address"
     }
 
     /// Name to group and label the drive by: the saved computer name, else a

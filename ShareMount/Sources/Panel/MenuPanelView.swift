@@ -39,6 +39,12 @@ struct MenuPanelView: View {
         store.shares.filter { manager.state(of: $0).isConnected }.count
     }
 
+    private var lastCheckedText: String {
+        guard let date = manager.lastChecked else { return "Check now" }
+        let time = DateFormatter.localizedString(from: date, dateStyle: .none, timeStyle: .short)
+        return "Check now · last checked \(time), retries every minute"
+    }
+
     private var header: some View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
@@ -51,6 +57,12 @@ struct MenuPanelView: View {
             }
             Spacer()
             if !store.shares.isEmpty {
+                Button { manager.checkNow() } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .buttonStyle(.borderless)
+                .help(lastCheckedText)
+                .accessibilityLabel("Check now")
                 Button("Connect All") { manager.connectAll() }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
@@ -225,6 +237,10 @@ private struct DriveRow: View {
                 .controlSize(.small)
         case .invalid:
             Button("Fix…") { actions.openSettings(share.id) }
+                .controlSize(.small)
+        case .awayUnavailable:
+            Button("Open Tailscale") { TailscaleService.open() }
+                .buttonStyle(.borderedProminent)
                 .controlSize(.small)
         }
     }

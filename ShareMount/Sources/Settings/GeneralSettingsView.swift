@@ -5,6 +5,7 @@ struct GeneralSettingsView: View {
 
     @State private var launchAtLogin = LoginItem.isEnabled
     @State private var needsApproval = LoginItem.needsApproval
+    @State private var notifications = Notifier.isEnabled
 
     private var version: String {
         let info = Bundle.main.infoDictionary
@@ -38,6 +39,15 @@ struct GeneralSettingsView: View {
                 }
             } footer: {
                 Text("With this on, drives set to Keep connected are connected as soon as you log in, and retried every minute while they’re unavailable.")
+                    .font(.callout)
+                    .foregroundColor(.secondary)
+            }
+
+            Section {
+                Toggle("Notify when a drive connects or disconnects", isOn: $notifications)
+                    .onChange(of: notifications) { Notifier.isEnabled = $0 }
+            } footer: {
+                Text("A disconnected notification has a Try Again button. If notifications don’t appear, allow them for ShareMount in System Settings → Notifications.")
                     .font(.callout)
                     .foregroundColor(.secondary)
             }

@@ -4,8 +4,12 @@ import Network
 
 /// What a drive is doing right now, as shown in the panel and Settings.
 enum DriveState: Equatable {
-    case connected(mountPoint: String, freeBytes: Int64, totalBytes: Int64)
+    /// `route` is nil when connected through the home address, else how it
+    /// connected while away, e.g. "Tailscale".
+    case connected(mountPoint: String, freeBytes: Int64, totalBytes: Int64, route: String?)
     case connecting
+    /// Away from home and the away route (Tailscale) is switched off.
+    case awayUnavailable(String)
     /// Needs a (different) password. The message says which.
     case needsPassword(String)
     /// Last attempt failed for another reason (server asleep, offline...).
@@ -23,7 +27,7 @@ enum DriveState: Equatable {
 
     var needsAttention: Bool {
         switch self {
-        case .needsPassword, .problem, .invalid: return true
+        case .needsPassword, .problem, .invalid, .awayUnavailable: return true
         default: return false
         }
     }
@@ -41,10 +45,13 @@ final class ConnectionManager: ObservableObject {
     static let retryInterval: TimeInterval = 60
 
     @Published private(set) var states: [Share.ID: DriveState] = [:]
+    /// When the last automatic or manual check ran (shown in the panel).
+    @Published private(set) var lastChecked: Date?
 
     private enum Failure: Equatable {
         case auth(String)
         case other(String)
+        case awayUnavailable(String)
     }
 
     private var failures: [Share.ID: Failure] = [:]
@@ -96,8 +103,44 @@ final class ConnectionManager: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.refresh() }
 
+        Notifier.shared.onRetry = { [weak self] id in
+            guard let self, let share = ShareStore.shared.shares.first(where: { $0.id == id }) else { return }
+            self.connect(share)
+        }
+
         refresh()
+        fillAwayHostsFromTailscale()
         scheduleAutoConnect(after: 1)
+    }
+
+    /// The panel's refresh button: re-read every drive's status, then try
+    /// every Keep-connected drive that's down, right now.
+    func checkNow() {
+        failures = failures.filter { _, failure in
+            if case .auth = failure { return true }   // don't retry a known-bad password
+            return false
+        }
+        fillAwayHostsFromTailscale()
+        autoConnectAll()
+    }
+
+    /// Give drives with no away address yet (nil, not "") the Tailscale
+    /// address of their computer, if Tailscale knows it.
+    func fillAwayHostsFromTailscale() {
+        let missing = ShareStore.shared.shares.filter { $0.awayHost == nil }
+        guard !missing.isEmpty, TailscaleService.isInstalled else { return }
+        queue.async {
+            guard let status = TailscaleService.status() else { return }
+            let found = missing.compactMap { share in
+                status.awayHost(for: share).map { (share.id, $0) }
+            }
+            guard !found.isEmpty else { return }
+            DispatchQueue.main.async {
+                for (id, host) in found {
+                    ShareStore.shared.mutate(id) { if $0.awayHost == nil { $0.awayHost = host } }
+                }
+            }
+        }
     }
 
     private func scheduleAutoConnect(after seconds: TimeInterval) {
@@ -120,20 +163,39 @@ final class ConnectionManager: ObservableObject {
         for share in ShareStore.shared.shares {
             newStates[share.id] = computeState(share, mounts: mounts)
         }
+        notifyChanges(from: states, to: newStates)
         if newStates != states { states = newStates }
+    }
+
+    /// Notify when a drive becomes connected, or drops without the user
+    /// disconnecting it. Drives seen for the first time (launch, just added
+    /// while already mounted) don't notify.
+    private func notifyChanges(from old: [Share.ID: DriveState], to new: [Share.ID: DriveState]) {
+        for share in ShareStore.shared.shares {
+            guard let before = old[share.id], let after = new[share.id] else { continue }
+            if !before.isConnected, case .connected(_, _, _, let route) = after {
+                Notifier.shared.driveConnected(share, via: route)
+            } else if before.isConnected, !after.isConnected, !userDisconnected.contains(share.id) {
+                Notifier.shared.driveLost(share, willRetry: share.autoConnect)
+            }
+        }
     }
 
     private func computeState(_ share: Share, mounts: [MountedVolume]) -> DriveState {
         guard share.host != nil, share.shareName != nil else { return .invalid }
-        if let volume = mounts.first(where: { MountSource(mntFromName: $0.from)?.matches(share) == true }) {
+        for volume in mounts {
+            guard let source = MountSource(mntFromName: volume.from), source.matches(share) else { continue }
+            let route = source.isAway(for: share)
+                ? share.activeAwayHost.map(Share.awayRouteName(for:)) : nil
             return .connected(mountPoint: volume.path, freeBytes: volume.freeBytes,
-                              totalBytes: volume.totalBytes)
+                              totalBytes: volume.totalBytes, route: route)
         }
         if inFlight.contains(share.id) { return .connecting }
         if userDisconnected.contains(share.id) { return .off }
         switch failures[share.id] {
         case .auth(let message)?: return .needsPassword(message)
         case .other(let message)?: return .problem(message)
+        case .awayUnavailable(let message)?: return .awayUnavailable(message)
         case nil: return .off
         }
     }
@@ -149,18 +211,13 @@ final class ConnectionManager: ObservableObject {
         refresh()
 
         queue.async {
+            // Passwords are saved under the home host and used for either route.
             let credentials = explicit ?? share.host.flatMap { KeychainStore.load(server: $0) }
             var failure: Failure?
             if !MountManager.isMounted(share) {
-                do {
-                    try MountManager.mount(share, credentials: credentials)
-                    if let explicit, let host = share.host {
-                        KeychainStore.save(explicit, server: host)
-                    }
-                } catch MountError.authRequired {
-                    failure = .auth(credentials == nil ? "Password needed" : "Password was rejected")
-                } catch {
-                    failure = .other(error.localizedDescription)
+                failure = Self.mountByBestRoute(share, credentials: credentials)
+                if failure == nil, let explicit, let host = share.host {
+                    KeychainStore.save(explicit, server: host)
                 }
             }
             DispatchQueue.main.async {
@@ -168,6 +225,43 @@ final class ConnectionManager: ObservableObject {
                 self.failures[share.id] = failure
                 self.refresh()
             }
+        }
+    }
+
+    /// Home if its address answers; otherwise the away address (Tailscale).
+    /// Returns nil on success. Runs on the background queue.
+    private static func mountByBestRoute(_ share: Share, credentials: Credentials?) -> Failure? {
+        guard let away = share.awayShare, let awayHost = share.activeAwayHost else {
+            return attempt(share, credentials: credentials)          // no away address set
+        }
+        let homeAnswers = share.host.map { Reachability.canConnect(to: $0) } ?? false
+        if homeAnswers {
+            let failure = attempt(share, credentials: credentials)
+            guard case .other? = failure else { return failure }    // done, or a password problem
+            return attempt(away, credentials: credentials) == nil ? nil : failure
+        }
+        // Away from home. If the route is Tailscale and it's switched off, say so.
+        if Share.awayRouteName(for: awayHost) == "Tailscale", TailscaleService.isInstalled,
+           let status = TailscaleService.status(), !status.isRunning {
+            return .awayUnavailable("Away from home, and Tailscale is off")
+        }
+        if let failure = attempt(away, credentials: credentials) {
+            if case .other(let message) = failure {
+                return .other("Couldn’t reach it at home or via \(Share.awayRouteName(for: awayHost)). \(message)")
+            }
+            return failure
+        }
+        return nil
+    }
+
+    private static func attempt(_ share: Share, credentials: Credentials?) -> Failure? {
+        do {
+            try MountManager.mount(share, credentials: credentials)
+            return nil
+        } catch MountError.authRequired {
+            return .auth(credentials == nil ? "Password needed" : "Password was rejected")
+        } catch {
+            return .other(error.localizedDescription)
         }
     }
 
@@ -206,6 +300,7 @@ final class ConnectionManager: ObservableObject {
 
     /// Background reconnect of Keep-connected drives. Never prompts.
     private func autoConnectAll() {
+        lastChecked = Date()
         refresh()
         for share in ShareStore.shared.shares
         where share.autoConnect && !userDisconnected.contains(share.id) && !state(of: share).isConnected {
@@ -224,7 +319,7 @@ final class ConnectionManager: ObservableObject {
     }
 
     func openInFinder(_ share: Share) {
-        guard case .connected(let path, _, _) = state(of: share) else { return }
+        guard case .connected(let path, _, _, _) = state(of: share) else { return }
         NSWorkspace.shared.open(URL(fileURLWithPath: path))
     }
 
@@ -244,11 +339,13 @@ extension DriveState {
     /// One-line description, e.g. "Connected · 3.2 TB free".
     func summary(for share: Share) -> String {
         switch self {
-        case .connected(_, let free, _):
+        case .connected(_, let free, _, let route):
+            let connected = route.map { "Connected via \($0)" } ?? "Connected"
             return free > 0
-                ? "Connected · \(ByteCountFormatter.string(fromByteCount: free, countStyle: .file)) free"
-                : "Connected"
+                ? "\(connected) · \(ByteCountFormatter.string(fromByteCount: free, countStyle: .file)) free"
+                : connected
         case .connecting: return "Connecting…"
+        case .awayUnavailable(let message): return message
         case .needsPassword(let message): return message
         case .problem(let message):
             return share.autoConnect ? "\(message) Retrying automatically." : message
@@ -263,7 +360,7 @@ extension DriveState {
         case .connected: return .systemGreen
         case .connecting: return .systemBlue
         case .needsPassword, .invalid: return .systemRed
-        case .problem: return .systemOrange
+        case .problem, .awayUnavailable: return .systemOrange
         case .off: return .secondaryLabelColor
         }
     }
@@ -275,6 +372,7 @@ extension DriveState {
         case .needsPassword: return "lock"
         case .problem: return "exclamationmark.arrow.triangle.2.circlepath"
         case .invalid: return "exclamationmark.triangle"
+        case .awayUnavailable: return "wifi.exclamationmark"
         }
     }
 }

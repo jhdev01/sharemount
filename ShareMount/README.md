@@ -93,6 +93,8 @@ GitHub Actions runs the same build and tests on every push and pull request
 | Listing a computer's shares | `/usr/bin/smbutil view` — macOS has no public API for this (`ShareLister`) |
 | Add a Drive | `AddDriveView` + `AddDriveModel` |
 | Settings | SwiftUI `NavigationSplitView` (`SettingsView`, `DriveDetailView`, `GeneralSettingsView`) |
+| Away from home | `Reachability` (quick check of port 445) picks home or the away host; `TailscaleService` reads `tailscale status --json` |
+| Notifications | `UserNotifications` via `Notifier`, with a Try Again action |
 | Launch at login | `SMAppService.mainApp.register()` (`LoginItem`) |
 | No Dock icon | `LSUIElement` + `NSApp.setActivationPolicy(.accessory)` |
 
@@ -133,6 +135,34 @@ When signing in, the username and password are passed to `smbutil` on its
 command line, so for those few seconds they're visible to other processes on
 your Mac (e.g. via `ps`). That's fine for a personal Mac; keep it in mind on a
 shared one.
+
+## Away from home (Tailscale)
+
+ShareMount can reach a drive away from home through [Tailscale](https://tailscale.com),
+without anyone having to think about it.
+
+1. Install Tailscale on the computer with the drive and on the laptop, sign in to
+   the same account, and turn on **Launch at login** in Tailscale on both.
+2. That's it: ShareMount looks the computer up in Tailscale and fills in the
+   drive's **When away** address by itself (Settings → the drive). You can also
+   set it by hand: the computer's Tailscale (MagicDNS) name or its 100.x.x.x address.
+
+Before each connection ShareMount quickly checks whether the home address
+answers. At home it connects directly; away, it connects through Tailscale, and
+the panel says "Connected via Tailscale". If you're away and Tailscale is off,
+the drive shows **Open Tailscale**.
+
+Speed away from home is limited by your home internet's upload speed. Never
+expose file sharing to the internet with router port forwarding; Tailscale is
+the safe way to do this.
+
+## Notifications and refreshing
+
+ShareMount posts a notification when a drive connects, or drops without you
+disconnecting it. A dropped-drive notification has a **Try Again** button.
+The refresh button in the panel header checks and retries every
+Keep-connected drive right away (otherwise it retries every minute). Turn
+notifications off in Settings → General.
 
 ## Network location format
 

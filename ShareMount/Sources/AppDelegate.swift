@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory)
         installMainMenu()
         LoginItem.syncAtLaunch()
+        Notifier.shared.start()
         ConnectionManager.shared.start()
         statusController = StatusItemController(
             addDrive: { [weak self] in self?.showAddDrive() },

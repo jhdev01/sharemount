@@ -38,10 +38,17 @@ struct MountSource: Equatable {
         shareName = rawShare.removingPercentEncoding ?? rawShare
     }
 
-    /// True if this mount is the given share (exact host, case-insensitive share name).
+    /// True if this mount is the given share: same share name (case-insensitive)
+    /// from its home host or its away host.
     func matches(_ share: Share) -> Bool {
-        guard let shareHost = share.host, let name = share.shareName else { return false }
-        return Share.normalizedHost(shareHost) == host
-            && name.caseInsensitiveCompare(shareName) == .orderedSame
+        guard let name = share.shareName,
+              name.caseInsensitiveCompare(shareName) == .orderedSame else { return false }
+        return share.allHosts.contains { Share.normalizedHost($0) == host }
+    }
+
+    /// True if this mount came through the share's away host.
+    func isAway(for share: Share) -> Bool {
+        guard let away = share.activeAwayHost else { return false }
+        return Share.normalizedHost(away) == host
     }
 }

@@ -115,6 +115,7 @@ final class AddDriveModel: ObservableObject {
                           autoConnect: keepConnected, serverName: target.title)
         guard share.shareName != nil else { return false }
         ShareStore.shared.add([share])
+        ConnectionManager.shared.fillAwayHostsFromTailscale()
         ConnectionManager.shared.connect(share, credentials: credentials)
         return true
     }
@@ -139,6 +140,7 @@ final class AddDriveModel: ObservableObject {
                   autoConnect: keepConnected, serverName: target.title)
         }
         ShareStore.shared.add(shares)
+        ConnectionManager.shared.fillAwayHostsFromTailscale()
         for share in shares where keepConnected {
             ConnectionManager.shared.connect(share, credentials: credentials)
         }

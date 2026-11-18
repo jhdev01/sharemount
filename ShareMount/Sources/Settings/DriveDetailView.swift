@@ -10,6 +10,7 @@ struct DriveDetailView: View {
     @State private var savedUser: String?
     @State private var editingLocation = false
     @State private var editingPassword = false
+    @State private var editingAway = false
     @State private var confirmingRemove = false
 
     init(share: Share, manager: ConnectionManager) {
@@ -46,6 +47,30 @@ struct DriveDetailView: View {
                             .textSelection(.enabled)
                         Spacer()
                         Button("Change…") { editingLocation = true }
+                    }
+                    .padding(12)
+                    Divider()
+                    HStack(alignment: .top, spacing: 12) {
+                        Text("When away").frame(width: 90, alignment: .leading).foregroundColor(.secondary)
+                        VStack(alignment: .leading, spacing: 3) {
+                            if let away = share.activeAwayHost {
+                                Text(away)
+                                    .font(.system(.body, design: .monospaced))
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                    .textSelection(.enabled)
+                                Text("Used when \(share.computerName) can’t be reached at home (via \(Share.awayRouteName(for: away))).")
+                                    .font(.caption).foregroundColor(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            } else {
+                                Text("Not set").foregroundColor(.secondary)
+                                Text("Add the computer’s Tailscale name to reach this drive away from home.")
+                                    .font(.caption).foregroundColor(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                        Spacer()
+                        Button(share.activeAwayHost == nil ? "Set Up…" : "Change…") { editingAway = true }
                     }
                     .padding(12)
                 }
@@ -98,7 +123,7 @@ struct DriveDetailView: View {
                 }
 
                 HStack {
-                    if case .connected(let path, _, _) = state {
+                    if case .connected(let path, _, _, _) = state {
                         Text("Mounted at \(path)").font(.callout).foregroundColor(.secondary)
                     }
                     Spacer()
@@ -112,6 +137,9 @@ struct DriveDetailView: View {
         .onAppear(perform: loadSavedUser)
         .sheet(isPresented: $editingLocation) {
             LocationSheet(share: share)
+        }
+        .sheet(isPresented: $editingAway) {
+            AwayAddressSheet(share: share)
         }
         .sheet(isPresented: $editingPassword, onDismiss: loadSavedUser) {
             if let host = share.host {
@@ -157,15 +185,19 @@ struct DriveDetailView: View {
             case .invalid:
                 Button("Fix Location…") { editingLocation = true }
                     .buttonStyle(.borderedProminent)
+            case .awayUnavailable:
+                Button("Open Tailscale") { TailscaleService.open() }
+                    .buttonStyle(.borderedProminent)
             }
         }
     }
 
     private var statusLine: String {
-        if case .connected(_, let free, let total) = state, total > 0 {
+        if case .connected(_, let free, let total, let route) = state, total > 0 {
             let f = ByteCountFormatter.string(fromByteCount: free, countStyle: .file)
             let t = ByteCountFormatter.string(fromByteCount: total, countStyle: .file)
-            return "Connected · \(f) free of \(t)"
+            let connected = route.map { "Connected via \($0)" } ?? "Connected"
+            return "\(connected) · \(f) free of \(t)"
         }
         return state.summary(for: share)
     }
@@ -282,5 +314,98 @@ struct PasswordSheet: View {
             username = saved?.username ?? ""
             hasSaved = saved != nil
         }
+    }
+}
+
+/// Set the address used away from home, typically the computer's Tailscale name.
+private struct AwayAddressSheet: View {
+    let share: Share
+    @Environment(\.dismiss) private var dismiss
+    @State private var host: String
+    @State private var suggestion: String?
+    @State private var looking = TailscaleService.isInstalled
+    @State private var tailscaleRunning = true
+
+    init(share: Share) {
+        self.share = share
+        _host = State(initialValue: share.activeAwayHost ?? "")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Connect Away from Home").font(.headline)
+            Text("When \(share.computerName) can’t be reached on your home network, ShareMount connects through this address instead. With Tailscale, use the computer’s Tailscale name (MagicDNS) or its 100.x.x.x address.")
+                .font(.callout)
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(width: 400, alignment: .leading)
+
+            if looking {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text("Looking for \(share.computerName) in Tailscale…").foregroundColor(.secondary)
+                }
+            } else if let suggestion, suggestion != host {
+                HStack {
+                    Image(systemName: "checkmark.circle.fill").foregroundColor(Color(nsColor: .systemGreen))
+                    Text("Found in Tailscale: \(suggestion)").lineLimit(1).truncationMode(.middle)
+                    Spacer()
+                    Button("Use This") { host = suggestion }
+                }
+                .font(.callout)
+            } else if !TailscaleService.isInstalled {
+                Text("Tailscale isn’t installed on this Mac. Install it and sign in, and ShareMount can fill this in for you.")
+                    .font(.caption).foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if !tailscaleRunning {
+                Text("Tailscale is installed but switched off, so ShareMount couldn’t look the computer up.")
+                    .font(.caption).foregroundColor(.secondary)
+            }
+
+            TextField("e.g. halderman-imac.tail1234.ts.net", text: $host)
+                .textFieldStyle(.roundedBorder)
+                .font(.system(.body, design: .monospaced))
+                .frame(width: 400)
+
+            HStack {
+                if share.activeAwayHost != nil {
+                    Button("Turn Off", role: .destructive) { save("") }
+                }
+                Spacer()
+                Button("Cancel") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                Button("Save") { save(host) }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(host.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+        .padding(20)
+        .onAppear(perform: lookUp)
+    }
+
+    private func lookUp() {
+        guard TailscaleService.isInstalled else { looking = false; return }
+        DispatchQueue.global(qos: .userInitiated).async {
+            let status = TailscaleService.status()
+            let found = status?.awayHost(for: share)
+            DispatchQueue.main.async {
+                looking = false
+                tailscaleRunning = status?.isRunning ?? false
+                suggestion = found
+                if host.isEmpty, let found { host = found }
+            }
+        }
+    }
+
+    /// "" turns the away address off (and stops it being filled in again).
+    private func save(_ value: String) {
+        var cleaned = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Accept a pasted URL or "host/share": keep only the host.
+        if let parsed = Share(displayName: "", location: cleaned).host, !cleaned.isEmpty { cleaned = parsed }
+        ShareStore.shared.mutate(share.id) { $0.awayHost = cleaned }
+        var updated = share
+        updated.awayHost = cleaned
+        ConnectionManager.shared.settingsChanged(for: updated)
+        dismiss()
     }
 }
