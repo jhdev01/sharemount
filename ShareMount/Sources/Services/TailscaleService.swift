@@ -25,6 +25,11 @@ enum TailscaleService {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: path)
         process.arguments = ["status", "--json"]
+        // The Mac app's binary acts as the CLI when run from a terminal; this
+        // asks for CLI behaviour when run from another app too.
+        var environment = ProcessInfo.processInfo.environment
+        environment["TAILSCALE_BE_CLI"] = "1"
+        process.environment = environment
         let out = Pipe()
         process.standardOutput = out
         process.standardError = FileHandle.nullDevice

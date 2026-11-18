@@ -228,8 +228,11 @@ final class ConnectionManager: ObservableObject {
         }
     }
 
-    /// Home if its address answers; otherwise the away address (Tailscale).
-    /// Returns nil on success. Runs on the background queue.
+    /// Try the home address and the away address (Tailscale), in the order a
+    /// quick check suggests: home first if it answers, else away first. Both
+    /// are always tried, because the quick check can miss (a waking computer,
+    /// Local Network permission not granted yet). Returns nil on success.
+    /// Runs on the background queue.
     private static func mountByBestRoute(_ share: Share, credentials: Credentials?) -> Failure? {
         guard let away = share.awayShare, let awayHost = share.activeAwayHost else {
             return attempt(share, credentials: credentials)          // no away address set
@@ -240,18 +243,24 @@ final class ConnectionManager: ObservableObject {
             guard case .other? = failure else { return failure }    // done, or a password problem
             return attempt(away, credentials: credentials) == nil ? nil : failure
         }
-        // Away from home. If the route is Tailscale and it's switched off, say so.
-        if Share.awayRouteName(for: awayHost) == "Tailscale", TailscaleService.isInstalled,
+
+        // Home didn't answer quickly: probably away. Try the away route first,
+        // unless it's Tailscale and Tailscale is switched off.
+        let route = Share.awayRouteName(for: awayHost)
+        var tailscaleOff = false
+        if route == "Tailscale", TailscaleService.isInstalled,
            let status = TailscaleService.status(), !status.isRunning {
-            return .awayUnavailable("Away from home, and Tailscale is off")
+            tailscaleOff = true
         }
-        if let failure = attempt(away, credentials: credentials) {
-            if case .other(let message) = failure {
-                return .other("Couldn’t reach it at home or via \(Share.awayRouteName(for: awayHost)). \(message)")
-            }
-            return failure
+        if !tailscaleOff {
+            let awayFailure = attempt(away, credentials: credentials)
+            guard case .other? = awayFailure else { return awayFailure }
         }
-        return nil
+        // Then home anyway.
+        let homeFailure = attempt(share, credentials: credentials)
+        guard case .other(let message)? = homeFailure else { return homeFailure }
+        if tailscaleOff { return .awayUnavailable("Away from home, and Tailscale is off") }
+        return .other("Couldn’t reach it at home or via \(route). \(message)")
     }
 
     private static func attempt(_ share: Share, credentials: Credentials?) -> Failure? {
