@@ -123,7 +123,8 @@ final class ConnectionManager: ObservableObject {
     /// connection is dead (e.g. home Wi-Fi → phone hotspot), and then nothing
     /// would reconnect it. For each connected drive with an away address,
     /// check the address it's mounted through still answers; if it doesn't
-    /// (twice) but the other address does, drop the dead mount and reconnect,
+    /// (twice), the other address does, and the mounted drive itself doesn't
+    /// respond, drop the dead mount and reconnect,
     /// which picks the working route. If neither answers (computer asleep or
     /// offline) the mount is left alone.
     private func replaceStaleMounts() {
@@ -143,7 +144,10 @@ final class ConnectionManager: ObservableObject {
                 var dropped = false
                 if !Reachability.canConnect(to: current) {
                     Thread.sleep(forTimeInterval: 1)
-                    if !Reachability.canConnect(to: current), Reachability.canConnect(to: other) {
+                    // Last safety check: only drop it if the drive itself has stopped
+                    // answering too, so a healthy connection is never cut off.
+                    if !Reachability.canConnect(to: current), Reachability.canConnect(to: other),
+                       !Reachability.mountResponds(at: path) {
                         // The old connection is already dead; force it off so the
                         // drive can be mounted again through the working address.
                         dropped = Darwin.unmount(path, MNT_FORCE) == 0

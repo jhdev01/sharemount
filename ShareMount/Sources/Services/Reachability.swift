@@ -31,4 +31,21 @@ enum Reachability {
         lock.lock(); defer { lock.unlock() }
         return ready
     }
+
+    /// Whether a mounted volume still answers: list its top folder on a
+    /// separate thread and give up after `timeout`. A dead network mount
+    /// hangs or fails here; a live one answers quickly. Blocks.
+    static func mountResponds(at path: String, timeout: TimeInterval = 3) -> Bool {
+        let done = DispatchSemaphore(value: 0)
+        let lock = NSLock()
+        var answered = false
+        Thread.detachNewThread {
+            let ok = (try? FileManager.default.contentsOfDirectory(atPath: path)) != nil
+            lock.lock(); answered = ok; lock.unlock()
+            done.signal()
+        }
+        guard done.wait(timeout: .now() + timeout) == .success else { return false }
+        lock.lock(); defer { lock.unlock() }
+        return answered
+    }
 }
