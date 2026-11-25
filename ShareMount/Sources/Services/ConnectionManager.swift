@@ -57,6 +57,11 @@ final class ConnectionManager: ObservableObject {
     private var failures: [Share.ID: Failure] = [:]
     private var userDisconnected: Set<Share.ID> = []
     private var inFlight: Set<Share.ID> = []
+    /// Drives whose connection is being checked for going stale.
+    private var checkingStale: Set<Share.ID> = []
+    /// Drives being moved to their other address (home <-> Tailscale): their
+    /// brief disconnect isn't announced, only the reconnect.
+    private var switchingRoute: Set<Share.ID> = []
     private var pending: DispatchWorkItem?
     private var retryTimer: Timer?
     private var refreshTimer: Timer?
@@ -93,6 +98,7 @@ final class ConnectionManager: ObservableObject {
         }
 
         retryTimer = Timer.scheduledTimer(withTimeInterval: Self.retryInterval, repeats: true) { [weak self] _ in
+            self?.replaceStaleMounts()
             self?.autoConnectAll()
         }
         refreshTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
@@ -113,6 +119,52 @@ final class ConnectionManager: ObservableObject {
         scheduleAutoConnect(after: 1)
     }
 
+    /// A drive can stay "mounted" after the network changes even though its
+    /// connection is dead (e.g. home Wi-Fi → phone hotspot), and then nothing
+    /// would reconnect it. For each connected drive with an away address,
+    /// check the address it's mounted through still answers; if it doesn't
+    /// (twice) but the other address does, drop the dead mount and reconnect,
+    /// which picks the working route. If neither answers (computer asleep or
+    /// offline) the mount is left alone.
+    private func replaceStaleMounts() {
+        for share in ShareStore.shared.shares where share.autoConnect {
+            guard case .connected(let path, _, _, let route) = state(of: share),
+                  let homeHost = share.host, let awayHost = share.activeAwayHost,
+                  !inFlight.contains(share.id), !checkingStale.contains(share.id),
+                  !userDisconnected.contains(share.id)
+            else { continue }
+            checkingStale.insert(share.id)
+            // Mark before unmounting: the unmount notification can arrive
+            // before this check finishes, and shouldn't announce "Disconnected".
+            switchingRoute.insert(share.id)
+            let current = route == nil ? homeHost : awayHost
+            let other = route == nil ? awayHost : homeHost
+            queue.async {
+                var dropped = false
+                if !Reachability.canConnect(to: current) {
+                    Thread.sleep(forTimeInterval: 1)
+                    if !Reachability.canConnect(to: current), Reachability.canConnect(to: other) {
+                        // The old connection is already dead; force it off so the
+                        // drive can be mounted again through the working address.
+                        dropped = Darwin.unmount(path, MNT_FORCE) == 0
+                        NSLog("ShareMount: \(current) stopped answering, \(other) answers; " +
+                              "dropped stale mount \(path): \(dropped)")
+                    }
+                }
+                DispatchQueue.main.async {
+                    self.checkingStale.remove(share.id)
+                    guard dropped else {
+                        self.switchingRoute.remove(share.id)
+                        return
+                    }
+                    self.failures[share.id] = nil
+                    self.refresh()
+                    self.connect(share, userInitiated: false)
+                }
+            }
+        }
+    }
+
     /// The panel's refresh button: re-read every drive's status, then try
     /// every Keep-connected drive that's down, right now.
     func checkNow() {
@@ -121,6 +173,7 @@ final class ConnectionManager: ObservableObject {
             return false
         }
         fillAwayHostsFromTailscale()
+        replaceStaleMounts()
         autoConnectAll()
     }
 
@@ -145,7 +198,10 @@ final class ConnectionManager: ObservableObject {
 
     private func scheduleAutoConnect(after seconds: TimeInterval) {
         pending?.cancel()
-        let work = DispatchWorkItem { [weak self] in self?.autoConnectAll() }
+        let work = DispatchWorkItem { [weak self] in
+            self?.replaceStaleMounts()
+            self?.autoConnectAll()
+        }
         pending = work
         DispatchQueue.main.asyncAfter(deadline: .now() + seconds, execute: work)
     }
@@ -174,9 +230,14 @@ final class ConnectionManager: ObservableObject {
         for share in ShareStore.shared.shares {
             guard let before = old[share.id], let after = new[share.id] else { continue }
             if !before.isConnected, case .connected(_, _, _, let route) = after {
+                switchingRoute.remove(share.id)
                 Notifier.shared.driveConnected(share, via: route)
             } else if before.isConnected, !after.isConnected, !userDisconnected.contains(share.id) {
-                Notifier.shared.driveLost(share, willRetry: share.autoConnect)
+                if !switchingRoute.contains(share.id) {
+                    Notifier.shared.driveLost(share, willRetry: share.autoConnect)
+                }
+                // Don't wait for the next one-minute retry.
+                if share.autoConnect { scheduleAutoConnect(after: 2) }
             }
         }
     }
@@ -223,6 +284,7 @@ final class ConnectionManager: ObservableObject {
             DispatchQueue.main.async {
                 self.inFlight.remove(share.id)
                 self.failures[share.id] = failure
+                if failure != nil { self.switchingRoute.remove(share.id) }
                 self.refresh()
             }
         }

@@ -106,6 +106,11 @@ enum MountManager {
 
         let openOptions = NSMutableDictionary()
         openOptions[uiOptionKey] = uiOptionNoUI
+        // Soft mount (kNetFSSoftMountKey): if the server stops answering, file
+        // operations fail after a timeout instead of hanging Finder, which
+        // matters when a laptop changes networks. Ignored if unsupported.
+        let mountOptions = NSMutableDictionary()
+        mountOptions["SoftMount"] = true
 
         var mountpoints: Unmanaged<CFArray>?
         let status = NetFSMountURLSync(
@@ -114,7 +119,7 @@ enum MountManager {
             credentials?.username as CFString?,
             credentials?.password as CFString?,
             openOptions as CFMutableDictionary,
-            nil,                                 // mount options
+            mountOptions as CFMutableDictionary,
             &mountpoints
         )
         mountpoints?.release()
